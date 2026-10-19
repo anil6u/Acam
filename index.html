@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Camera</title>
+
+<style>
+  * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #08090c;
+  color: white;
+  font-family: Arial, sans-serif;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.camera {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 18px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.logo span {
+  color: #9b8cff;
+}
+
+.status {
+  color: #b7b7c5;
+  font-size: 12px;
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #171922;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid #292b38;
+}
+
+video {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.overlay {
+  position: absolute;
+  inset: 16px;
+  pointer-events: none;
+  border: 1px solid #ffffff35;
+  border-radius: 18px;
+}
+
+.hint {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  text-shadow: 0 1px 5px black;
+}
+
+.zoom {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.zoom button {
+  width: 58px;
+  height: 42px;
+  border-radius: 24px;
+  border: 1px solid #343541;
+  color: white;
+  background: #181920;
+  font-size: 14px;
+}
+
+.zoom button.active {
+  background: #d9d3ff;
+  color: #171321;
+  border-color: #d9d3ff;
+  font-weight: bold;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding-bottom: 10px;
+}
+
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid #343541;
+  background: #191a22;
+  color: white;
+  font-size: 20px;
+}
+
+.capture {
+  height: 72px;
+  width: 72px;
+  border: 5px solid #777783;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 24px #aaa4ff22;
+}
+
+#message {
+  text-align: center;
+  font-size: 12px;
+  color: #b8b6ca;
+  min-height: 16px;
+}
+</style>
+</head>
+
+<body>
+<div class="camera">
+  <header class="top">
+    <div class="logo">A<span>CAM</span></div>
+    <div class="status ready" id="status">● READY</div>
+  </header>
+
+  <main class="preview">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="overlay"></div>
+    <div class="hint">ULTRA WIDE</div>
+  </main>
+
+  <div class="zoom">
+    <button id="wide" class="active">0.5x</button>
+    <button id="normal">1x</button>
+  </div>
+
+  <!-- Message element add kiya -->
+  <p id="message">Camera start karne ke liye neeche tap karo.</p>
+
+  <footer class="controls">
+    <button class="icon-btn" id="start" aria-label="Start camera">▶</button>
+    <button class="capture" id="capture" aria-label="Take photo"></button>
+    <button class="icon-btn" id="flip" aria-label="Switch camera">↻</button>
+    <button class="icon-btn" id="ai" aria-label="AI Mode">✨</button>
+  </footer>
+</div>
+
+<script>
+const video = document.querySelector("#video");
+const statusText = document.querySelector("#status");
+const message = document.querySelector("#message");
+const wide = document.querySelector("#wide");
+const normal = document.querySelector("#normal");
+const startBtn = document.querySelector("#start");
+const flipBtn = document.querySelector("#flip");
+const captureBtn = document.querySelector("#capture");
+const aiBtn = document.querySelector("#ai");
+
+let stream = null;
+let facing = "environment";
+let zoomMode = 0.5;
+let starting = false;
+
+function setStatus(state, text) {
+  statusText.className = "status " + state;
+  statusText.textContent = text;
+}
+
+function showError(text) {
+  setStatus("error", "CAMERA ERROR");
+  message.textContent = text;
+}
+
+async function startCamera() {
+  if (starting) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError("Camera API unavailable. Chrome mein HTTPS website par kholo.");
+    return;
+  }
+
+  starting = true;
+  startBtn.disabled = true;
+  setStatus("ready", "STARTING...");
+  message.textContent = "Camera connect ho raha hai...";
+
+  try {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    video.srcObject = null;
+
+    const constraints = {
+      audio: false,
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    };
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+
+    video.srcObject = stream;
+    await video.play();
+
+    setStatus("on", "● CAMERA ON");
+    message.textContent = "Camera ready! Photo le sakte ho.";
+    applyZoom();
+
+  } catch (error) {
+    showError("Camera start nahi hua. Error: " + error.name);
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    video.srcObject = null;
+  } finally {
+    starting = false;
+    startBtn.disabled = false;
+  }
+}
+
+function applyZoom() {
+  if (!stream) { message.textContent = "Pehle camera start karo."; return; }
+  const track = stream.getVideoTracks()[0];
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+
+  wide.classList.toggle("active", zoomMode === 0.5);
+  normal.classList.toggle("active", zoomMode === 1);
+
+  if (caps.zoom && zoomMode >= caps.zoom.min && zoomMode <= caps.zoom.max) {
+    track.applyConstraints({ advanced: [{ zoom: zoomMode }] })
+      .then(() => { video.style.transform = "none"; message.textContent = "Hardware zoom applied."; })
+      .catch(() => { video.style.transform = zoomMode === 0.5 ? "scale(0.85)" : "none"; });
+  } else {
+    video.style.transform = zoomMode === 0.5 ? "scale(0.85)" : "none";
+    message.textContent = zoomMode === 0.5 ? "Software ultra-wide preview." : "Normal camera view.";
+  }
+}
+
+wide.addEventListener("click", () => { zoomMode = 0.5; applyZoom(); });
+normal.addEventListener("click", () => { zoomMode = 1; applyZoom(); });
+startBtn.addEventListener("click", startCamera);
+
+flipBtn.addEventListener("click", async () => {
+  facing = facing === "environment" ? "user" : "environment";
+  if (stream) await startCamera();
+  else message.textContent = "Camera side select ho gayi. Ab Start dabao.";
+});
+
+captureBtn.addEventListener("click", () => {
+  if (!stream || !video.videoWidth) { message.textContent = "Pehle camera start hone do."; return; }
+  const canvas = document.createElement("canvas");
+
+  if (zoomMode === 0.5) {
+    canvas.width = video.videoWidth * 0.85;
+    canvas.height = video.videoHeight * 0.85;
+  } else {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  }
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  canvas.toBlob(blob => {
+    if (!blob) { message.textContent = "Photo save nahi ho saki."; return; }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "acamera-photo.jpg";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    message.textContent = "Photo download ho gayi.";
+  }, "image/jpeg", 0.95);
+});
+
+// AI Mode placeholder
+aiBtn.addEventListener("click", () => {
+  message.textContent = "AI Mode ON — yaha tum apna filter/processing logic add kar sakte ho.";
+});
+</script>
+</body>
+</html>
